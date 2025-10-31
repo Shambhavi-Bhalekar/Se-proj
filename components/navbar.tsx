@@ -2,6 +2,7 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useTheme } from "@/context/theme-context"
 import { motion } from "framer-motion"
 import { Menu, X, LogOut, User, Moon, Sun } from "lucide-react"
@@ -12,6 +13,7 @@ import { onAuthStateChanged, signOut, type User } from "firebase/auth"
 export function Navbar() {
   // ────── Auth (direct from Firebase) ──────
   const [user, setUser] = useState<User | null>(null)
+  const router = useRouter()
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => setUser(u))
@@ -21,6 +23,7 @@ export function Navbar() {
   const handleLogout = async () => {
     try {
       await signOut(auth)
+      router.push("/auth") // 👈 Redirect to /auth after logout
     } catch (e) {
       console.error("Logout error:", e)
     }

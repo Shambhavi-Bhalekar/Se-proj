@@ -3,7 +3,19 @@
 
 import { motion } from "framer-motion"
 import { Navbar } from "@/components/navbar"
-import { MessageSquare, Users, Heart, MessageCircle, Share2, Loader, Video, Plus, ExternalLink, Trash2 } from "lucide-react"
+import {
+  MessageSquare,
+  Users,
+  Heart,
+  MessageCircle,
+  Share2,
+  Loader,
+  Video,
+  Plus,
+  ExternalLink,
+  Trash2,
+  X,
+} from "lucide-react"
 import { useState, useEffect } from "react"
 import { db } from "@/lib/firebase"
 import {
@@ -159,9 +171,10 @@ export default function CommunityClientPage({ communityId }: { communityId: stri
       setNewRoomName("")
       setNewRoomDescription("")
       setShowRoomModal(false)
-      alert("Study room created!")
+      alert("Study room created successfully!")
     } catch (err) {
       console.error("Error creating room:", err)
+      alert("Failed to create room.")
     } finally {
       setIsLoading(false)
     }
@@ -179,21 +192,19 @@ export default function CommunityClientPage({ communityId }: { communityId: stri
     }
   }
 
-  // ❌ Delete Community (Creator only)
+  // ❌ Delete Community
   const handleDeleteCommunity = async () => {
     if (user?.id !== community?.createdBy)
       return alert("Only the community creator can delete this community.")
     if (!confirm("Are you sure you want to permanently delete this community?")) return
 
     try {
-      // Delete all subcollections (posts, rooms)
       const postsSnap = await getDocs(collection(db, "communities", communityId, "posts"))
       for (const p of postsSnap.docs) await deleteDoc(p.ref)
 
       const roomsSnap = await getDocs(collection(db, "communities", communityId, "studyRooms"))
       for (const r of roomsSnap.docs) await deleteDoc(r.ref)
 
-      // Delete community doc
       await deleteDoc(doc(db, "communities", communityId))
       alert("Community deleted successfully.")
       router.push("/communities")
@@ -224,11 +235,17 @@ export default function CommunityClientPage({ communityId }: { communityId: stri
       <Navbar />
       <div className="max-w-7xl mx-auto px-4 py-12">
         {/* 🏠 Community Header */}
-        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="glass rounded-2xl p-8 mb-12">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass rounded-2xl p-8 mb-12"
+        >
           <div className="flex justify-between items-start">
             <div>
               <h1 className="text-4xl font-bold mb-2">{community.name}</h1>
-              <p className="text-muted-foreground">{community.description || "No description provided"}</p>
+              <p className="text-muted-foreground">
+                {community.description || "No description provided"}
+              </p>
             </div>
 
             <div className="flex gap-3">
@@ -251,30 +268,23 @@ export default function CommunityClientPage({ communityId }: { communityId: stri
                     : "gradient-primary text-white"
                 }`}
               >
-                {joinStatus === "joined" ? "Joined" : joinStatus === "pending" ? "Pending" : "Join"}
+                {joinStatus === "joined"
+                  ? "Joined"
+                  : joinStatus === "pending"
+                  ? "Pending"
+                  : "Join"}
               </button>
-            </div>
-          </div>
-
-          <div className="flex gap-6 mt-4 text-sm">
-            <div className="flex items-center gap-2">
-              <Users size={18} />
-              <span>{members.length} members</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <MessageSquare size={18} />
-              <span>{posts.length} posts</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Video size={18} />
-              <span>{studyRooms.length} study rooms</span>
             </div>
           </div>
         </motion.div>
 
         {/* 🎥 Study Rooms */}
         {joinStatus === "joined" && (
-          <motion.div className="glass rounded-2xl p-6 mb-6" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+          <motion.div
+            className="glass rounded-2xl p-6 mb-6"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold flex items-center gap-2">
                 <Video size={20} /> Study Rooms
@@ -289,11 +299,16 @@ export default function CommunityClientPage({ communityId }: { communityId: stri
 
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {studyRooms.map((room) => (
-                <div key={room.id} className="p-4 rounded-lg bg-white/10 hover:bg-white/20 transition">
+                <div
+                  key={room.id}
+                  className="p-4 rounded-lg bg-white/10 hover:bg-white/20 transition"
+                >
                   <div className="flex justify-between items-start mb-2">
                     <h3 className="font-semibold">{room.name}</h3>
                     {room.isActive && (
-                      <span className="text-xs bg-green-500 text-white px-2 py-1 rounded-full">Active</span>
+                      <span className="text-xs bg-green-500 text-white px-2 py-1 rounded-full">
+                        Active
+                      </span>
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground mb-3">{room.description}</p>
@@ -302,7 +317,7 @@ export default function CommunityClientPage({ communityId }: { communityId: stri
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => router.push(`/study-room/${room.id}`)}
+                      onClick={() => router.push(`/studyroom/${room.id}`)}
                       className="flex-1 px-3 py-2 rounded-lg bg-primary text-white font-semibold flex items-center justify-center gap-2"
                     >
                       <ExternalLink size={16} /> Join
@@ -328,67 +343,49 @@ export default function CommunityClientPage({ communityId }: { communityId: stri
           </motion.div>
         )}
 
-        {/* 🧵 Post Composer */}
-        {joinStatus === "joined" && (
-          <motion.div className="glass rounded-2xl p-6 mb-6" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-            <textarea
-              value={newPost}
-              onChange={(e) => setNewPost(e.target.value)}
-              placeholder="Share something..."
-              disabled={isLoading}
-              className="w-full px-4 py-3 rounded-lg glass mb-4"
-              rows={3}
-            />
-            <div className="flex justify-end">
+        {/* 🧠 Create Room Modal */}
+        {showRoomModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl w-full max-w-md relative">
               <button
-                onClick={handlePost}
-                disabled={isLoading || !newPost.trim()}
-                className="px-6 py-2 rounded-lg gradient-primary text-white font-semibold flex items-center gap-2"
+                onClick={() => setShowRoomModal(false)}
+                className="absolute top-3 right-3 text-muted-foreground hover:text-foreground"
               >
-                {isLoading && <Loader size={18} className="animate-spin" />}
-                {isLoading ? "Posting..." : "Post"}
+                <X size={20} />
               </button>
+              <h2 className="text-xl font-bold mb-4">Create Study Room</h2>
+              <input
+                type="text"
+                placeholder="Room name"
+                value={newRoomName}
+                onChange={(e) => setNewRoomName(e.target.value)}
+                className="w-full px-4 py-2 mb-3 rounded-lg border border-muted-foreground/20 focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <textarea
+                placeholder="Description (optional)"
+                value={newRoomDescription}
+                onChange={(e) => setNewRoomDescription(e.target.value)}
+                className="w-full px-4 py-2 mb-4 rounded-lg border border-muted-foreground/20 focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowRoomModal(false)}
+                  className="px-4 py-2 rounded-lg bg-gray-200 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreateRoom}
+                  disabled={!newRoomName.trim() || isLoading}
+                  className="px-4 py-2 rounded-lg gradient-primary text-white font-semibold flex items-center gap-2"
+                >
+                  {isLoading && <Loader size={18} className="animate-spin" />}
+                  {isLoading ? "Creating..." : "Create"}
+                </button>
+              </div>
             </div>
-          </motion.div>
+          </div>
         )}
-
-        {/* 🗞️ Posts Feed */}
-        <div className="space-y-4">
-          {posts.map((post, i) => {
-            const liked = post.likedBy?.includes?.(user?.id)
-            return (
-              <motion.div
-                key={post.id}
-                className="glass rounded-2xl p-6 hover:bg-white/20"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05 }}
-              >
-                <h3 className="font-semibold">{post.authorName}</h3>
-                <p className="text-sm text-muted-foreground mb-2">
-                  {post.createdAt?.toDate?.().toLocaleString?.() || "just now"}
-                </p>
-                <p className="mb-4">{post.content}</p>
-                <div className="flex gap-6 text-muted-foreground">
-                  <button
-                    onClick={() => toggleLike(post.id, liked)}
-                    className={`flex items-center gap-2 ${liked ? "text-red-500" : "hover:text-primary"}`}
-                  >
-                    <Heart size={18} fill={liked ? "currentColor" : "none"} />
-                    <span>{post.likedBy?.length || 0}</span>
-                  </button>
-                  <button className="flex items-center gap-2 hover:text-primary">
-                    <MessageCircle size={18} />
-                    <span>{post.comments?.length || 0}</span>
-                  </button>
-                  <button className="flex items-center gap-2 hover:text-primary">
-                    <Share2 size={18} />
-                  </button>
-                </div>
-              </motion.div>
-            )
-          })}
-        </div>
       </div>
     </div>
   )
