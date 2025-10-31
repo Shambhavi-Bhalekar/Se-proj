@@ -97,7 +97,7 @@ export function Navbar() {
               </>
             ) : (
               <>
-                <Link href="/" className="smooth-transition hover:text-primary">
+                <Link href="/auth" className="smooth-transition hover:text-primary">
                   Login
                 </Link>
 

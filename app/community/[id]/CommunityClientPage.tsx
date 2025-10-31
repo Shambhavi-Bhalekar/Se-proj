@@ -293,7 +293,7 @@ export default function CommunityClientPage({ communityId }: { communityId: stri
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => router.push(`/study-room/${room.id}`)}
+                      onClick={() => router.push(`/studyroom/${room.id}`)}
                       className="flex-1 px-3 py-2 rounded-lg bg-primary text-white font-semibold flex items-center justify-center gap-2"
                     >
                       <ExternalLink size={16} /> Join
