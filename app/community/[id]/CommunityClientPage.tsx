@@ -50,6 +50,7 @@ export default function CommunityClientPage({ communityId }: { communityId: stri
   const [showRoomModal, setShowRoomModal] = useState(false)
   const [newRoomName, setNewRoomName] = useState("")
   const [newRoomDescription, setNewRoomDescription] = useState("")
+  const [newComments, setNewComments] = useState({})
 
   // 🔥 Realtime community listener
   useEffect(() => {
@@ -149,6 +150,44 @@ export default function CommunityClientPage({ communityId }: { communityId: stri
       setNewPost("")
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  // 💬 Add Comment
+  const handleAddComment = async (postId) => {
+    const text = newComments[postId]?.trim()
+    if (!text || !user) return
+    const ref = doc(db, "communities", communityId, "posts", postId)
+
+    const comment = {
+      id: `${user.id}-${Date.now()}`,
+      userId: user.id,
+      userName: user.name || "Anonymous",
+      text,
+      createdAt: new Date().toISOString(),
+    }
+
+    await updateDoc(ref, {
+      comments: arrayUnion(comment),
+    })
+
+    setNewComments((prev) => ({ ...prev, [postId]: "" }))
+  }
+
+  // 🗑️ Delete Comment
+  const handleDeleteComment = async (postId, comment) => {
+    if (!user || user.id !== comment.userId)
+      return alert("You can only delete your own comment.")
+
+    if (!confirm("Delete this comment?")) return
+
+    try {
+      const ref = doc(db, "communities", communityId, "posts", postId)
+      await updateDoc(ref, {
+        comments: arrayRemove(comment),
+      })
+    } catch (err) {
+      console.error("Error deleting comment:", err)
     }
   }
 
@@ -277,6 +316,104 @@ export default function CommunityClientPage({ communityId }: { communityId: stri
             </div>
           </div>
         </motion.div>
+
+        {/* 📝 Posts Section */}
+        {joinStatus === "joined" && (
+          <motion.div
+            className="glass rounded-2xl p-6 mb-12"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <MessageSquare size={20} /> Community Posts
+            </h2>
+            <div className="flex gap-2 mb-6">
+              <input
+                type="text"
+                placeholder="Share something..."
+                value={newPost}
+                onChange={(e) => setNewPost(e.target.value)}
+                className="flex-1 px-4 py-2 rounded-lg border border-muted-foreground/20 focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <button
+                onClick={handlePost}
+                disabled={!newPost.trim() || isLoading}
+                className="px-4 py-2 rounded-lg gradient-primary text-white font-semibold"
+              >
+                {isLoading ? "Posting..." : "Post"}
+              </button>
+            </div>
+
+            {posts.map((post) => (
+              <div
+                key={post.id}
+                className="p-4 mb-4 rounded-xl bg-white/10 hover:bg-white/20 transition"
+              >
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <p className="font-semibold">{post.authorName}</p>
+                    <p className="text-sm text-muted-foreground">{post.content}</p>
+                  </div>
+                  <button
+                    onClick={() => toggleLike(post.id, post.likedBy?.includes(user?.id))}
+                    className="flex items-center gap-1 text-sm"
+                  >
+                    <Heart
+                      size={16}
+                      className={post.likedBy?.includes(user?.id) ? "text-red-500 fill-red-500" : ""}
+                    />
+                    {post.likedBy?.length || 0}
+                  </button>
+                </div>
+
+                {/* 💬 Comments */}
+                <div className="mt-3 pl-3 border-l border-white/20">
+                  {post.comments?.map((c) => (
+                    <div
+                      key={c.id}
+                      className="flex justify-between items-center text-sm mb-2"
+                    >
+                      <p>
+                        <span className="font-semibold">{c.userName}: </span>
+                        {c.text}
+                      </p>
+                      {user?.id === c.userId && (
+                        <button
+                          onClick={() => handleDeleteComment(post.id, c)}
+                          className="text-red-500 hover:text-red-700 text-xs flex items-center gap-1"
+                        >
+                          <Trash2 size={14} /> Delete
+                        </button>
+                      )}
+                    </div>
+                  ))}
+
+                  <div className="flex gap-2 mt-2">
+                    <input
+                      type="text"
+                      placeholder="Add a comment..."
+                      value={newComments[post.id] || ""}
+                      onChange={(e) =>
+                        setNewComments((prev) => ({ ...prev, [post.id]: e.target.value }))
+                      }
+                      className="flex-1 px-3 py-1 rounded-lg border border-muted-foreground/20 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                    />
+                    <button
+                      onClick={() => handleAddComment(post.id)}
+                      className="px-3 py-1 rounded-lg gradient-primary text-white text-sm font-semibold"
+                    >
+                      Comment
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {posts.length === 0 && (
+              <p className="text-center text-muted-foreground py-6">No posts yet.</p>
+            )}
+          </motion.div>
+        )}
 
         {/* 🎥 Study Rooms */}
         {joinStatus === "joined" && (
