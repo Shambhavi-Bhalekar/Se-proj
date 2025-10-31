@@ -3,7 +3,7 @@
 
 import { motion } from "framer-motion"
 import { Navbar } from "@/components/navbar"
-import { MessageSquare, Users, Heart, MessageCircle, Share2, Loader, Video, Plus, ExternalLink } from "lucide-react"
+import { MessageSquare, Users, Heart, MessageCircle, Share2, Loader, Video, Plus, ExternalLink, Trash2 } from "lucide-react"
 import { useState, useEffect } from "react"
 import { db } from "@/lib/firebase"
 import {
@@ -19,6 +19,7 @@ import {
   arrayRemove,
   serverTimestamp,
   deleteDoc,
+  getDocs,
 } from "firebase/firestore"
 import { useAuth } from "@/context/auth-context"
 import { useRouter } from "next/navigation"
@@ -49,8 +50,8 @@ export default function CommunityClientPage({ communityId }: { communityId: stri
         setMembers(data.members || [])
 
         if (user) {
-          if (data.members?.includes(user.id)) setJoinStatus("joined")
-          else if (data.joinRequests?.includes(user.id)) setJoinStatus("pending")
+          if (data.members?.includes?.(user.id)) setJoinStatus("joined")
+          else if (data.joinRequests?.includes?.(user.id)) setJoinStatus("pending")
           else setJoinStatus("none")
         }
       }
@@ -87,29 +88,19 @@ export default function CommunityClientPage({ communityId }: { communityId: stri
     try {
       const communityRef = doc(db, "communities", communityId)
       const communitySnap = await getDoc(communityRef)
-
-      if (!communitySnap.exists()) {
-        alert("Community not found.")
-        return
-      }
+      if (!communitySnap.exists()) return alert("Community not found.")
 
       const data = communitySnap.data()
       const creatorId = data.createdBy
 
-      if (data.members?.includes(user.id)) {
-        setJoinStatus("joined")
-        return
-      }
-      if (data.joinRequests?.includes(user.id)) {
-        setJoinStatus("pending")
-        return
-      }
+      if (data.members?.includes?.(user.id)) return setJoinStatus("joined")
+      if (data.joinRequests?.includes?.(user.id)) return setJoinStatus("pending")
 
       await updateDoc(communityRef, {
         joinRequests: arrayUnion(user.id),
       })
 
-      const notificationRef = await addDoc(collection(db, "notifications"), {
+      const notifRef = await addDoc(collection(db, "notifications"), {
         userId: creatorId,
         senderId: user.id,
         communityId,
@@ -120,8 +111,7 @@ export default function CommunityClientPage({ communityId }: { communityId: stri
         communityCreatorId: creatorId,
       })
 
-      await updateDoc(notificationRef, { id: notificationRef.id })
-
+      await updateDoc(notifRef, { id: notifRef.id })
       setJoinStatus("pending")
       alert("Join request sent!")
     } catch (err) {
@@ -181,11 +171,35 @@ export default function CommunityClientPage({ communityId }: { communityId: stri
   const handleDeleteRoom = async (roomId: string, creatorId: string) => {
     if (user?.id !== creatorId) return alert("Only the creator can delete this room.")
     if (!confirm("Delete this study room?")) return
-    
+
     try {
       await deleteDoc(doc(db, "communities", communityId, "studyRooms", roomId))
     } catch (err) {
       console.error("Error deleting room:", err)
+    }
+  }
+
+  // ❌ Delete Community (Creator only)
+  const handleDeleteCommunity = async () => {
+    if (user?.id !== community?.createdBy)
+      return alert("Only the community creator can delete this community.")
+    if (!confirm("Are you sure you want to permanently delete this community?")) return
+
+    try {
+      // Delete all subcollections (posts, rooms)
+      const postsSnap = await getDocs(collection(db, "communities", communityId, "posts"))
+      for (const p of postsSnap.docs) await deleteDoc(p.ref)
+
+      const roomsSnap = await getDocs(collection(db, "communities", communityId, "studyRooms"))
+      for (const r of roomsSnap.docs) await deleteDoc(r.ref)
+
+      // Delete community doc
+      await deleteDoc(doc(db, "communities", communityId))
+      alert("Community deleted successfully.")
+      router.push("/communities")
+    } catch (err) {
+      console.error("Error deleting community:", err)
+      alert("Failed to delete community.")
     }
   }
 
@@ -208,39 +222,38 @@ export default function CommunityClientPage({ communityId }: { communityId: stri
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
       <Navbar />
-
       <div className="max-w-7xl mx-auto px-4 py-12">
         {/* 🏠 Community Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="glass rounded-2xl p-8 mb-12"
-        >
-          <div className="flex justify-between">
+        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="glass rounded-2xl p-8 mb-12">
+          <div className="flex justify-between items-start">
             <div>
               <h1 className="text-4xl font-bold mb-2">{community.name}</h1>
-              <p className="text-muted-foreground">
-                {community.description || "No description provided"}
-              </p>
+              <p className="text-muted-foreground">{community.description || "No description provided"}</p>
             </div>
 
-            <button
-              onClick={joinStatus === "none" ? handleJoinCommunity : undefined}
-              disabled={joinStatus !== "none"}
-              className={`px-6 py-2 rounded-lg font-semibold ${
-                joinStatus === "joined"
-                  ? "bg-green-600 text-white"
-                  : joinStatus === "pending"
-                  ? "bg-yellow-500 text-white"
-                  : "gradient-primary text-white"
-              }`}
-            >
-              {joinStatus === "joined"
-                ? "Joined"
-                : joinStatus === "pending"
-                ? "Pending"
-                : "Join"}
-            </button>
+            <div className="flex gap-3">
+              {user?.id === community.createdBy && (
+                <button
+                  onClick={handleDeleteCommunity}
+                  className="px-4 py-2 rounded-lg bg-red-600 text-white font-semibold flex items-center gap-2"
+                >
+                  <Trash2 size={18} /> Delete
+                </button>
+              )}
+              <button
+                onClick={joinStatus === "none" ? handleJoinCommunity : undefined}
+                disabled={joinStatus !== "none"}
+                className={`px-6 py-2 rounded-lg font-semibold ${
+                  joinStatus === "joined"
+                    ? "bg-green-600 text-white"
+                    : joinStatus === "pending"
+                    ? "bg-yellow-500 text-white"
+                    : "gradient-primary text-white"
+                }`}
+              >
+                {joinStatus === "joined" ? "Joined" : joinStatus === "pending" ? "Pending" : "Join"}
+              </button>
+            </div>
           </div>
 
           <div className="flex gap-6 mt-4 text-sm">
@@ -259,13 +272,9 @@ export default function CommunityClientPage({ communityId }: { communityId: stri
           </div>
         </motion.div>
 
-        {/* 🎥 Study Rooms Section */}
+        {/* 🎥 Study Rooms */}
         {joinStatus === "joined" && (
-          <motion.div
-            className="glass rounded-2xl p-6 mb-6"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
+          <motion.div className="glass rounded-2xl p-6 mb-6" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold flex items-center gap-2">
                 <Video size={20} /> Study Rooms
@@ -293,7 +302,7 @@ export default function CommunityClientPage({ communityId }: { communityId: stri
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => router.push(`/studyroom/${room.id}`)}
+                      onClick={() => router.push(`/study-room/${room.id}`)}
                       className="flex-1 px-3 py-2 rounded-lg bg-primary text-white font-semibold flex items-center justify-center gap-2"
                     >
                       <ExternalLink size={16} /> Join
@@ -319,55 +328,9 @@ export default function CommunityClientPage({ communityId }: { communityId: stri
           </motion.div>
         )}
 
-        {/* Create Room Modal */}
-        {showRoomModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="glass rounded-2xl p-6 max-w-md w-full mx-4"
-            >
-              <h2 className="text-xl font-bold mb-4">Create Study Room</h2>
-              <input
-                type="text"
-                value={newRoomName}
-                onChange={(e) => setNewRoomName(e.target.value)}
-                placeholder="Room name"
-                className="w-full px-4 py-2 rounded-lg glass mb-3"
-              />
-              <textarea
-                value={newRoomDescription}
-                onChange={(e) => setNewRoomDescription(e.target.value)}
-                placeholder="Description (optional)"
-                className="w-full px-4 py-2 rounded-lg glass mb-4"
-                rows={3}
-              />
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setShowRoomModal(false)}
-                  className="flex-1 px-4 py-2 rounded-lg bg-white/10"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleCreateRoom}
-                  disabled={isLoading || !newRoomName.trim()}
-                  className="flex-1 px-4 py-2 rounded-lg gradient-primary text-white font-semibold"
-                >
-                  {isLoading ? <Loader size={18} className="animate-spin mx-auto" /> : "Create"}
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-
         {/* 🧵 Post Composer */}
         {joinStatus === "joined" && (
-          <motion.div
-            className="glass rounded-2xl p-6 mb-6"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
+          <motion.div className="glass rounded-2xl p-6 mb-6" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
             <textarea
               value={newPost}
               onChange={(e) => setNewPost(e.target.value)}
@@ -392,7 +355,7 @@ export default function CommunityClientPage({ communityId }: { communityId: stri
         {/* 🗞️ Posts Feed */}
         <div className="space-y-4">
           {posts.map((post, i) => {
-            const liked = post.likedBy?.includes(user?.id)
+            const liked = post.likedBy?.includes?.(user?.id)
             return (
               <motion.div
                 key={post.id}
@@ -409,9 +372,7 @@ export default function CommunityClientPage({ communityId }: { communityId: stri
                 <div className="flex gap-6 text-muted-foreground">
                   <button
                     onClick={() => toggleLike(post.id, liked)}
-                    className={`flex items-center gap-2 ${
-                      liked ? "text-red-500" : "hover:text-primary"
-                    }`}
+                    className={`flex items-center gap-2 ${liked ? "text-red-500" : "hover:text-primary"}`}
                   >
                     <Heart size={18} fill={liked ? "currentColor" : "none"} />
                     <span>{post.likedBy?.length || 0}</span>

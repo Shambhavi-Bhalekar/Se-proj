@@ -1,9 +1,16 @@
-//@ts-nocheck
+// @ts-nocheck
 "use client"
 
 import { useEffect } from "react"
 import { useSocket } from "@/context/socket-context"
 import { SOCKET_EVENTS } from "@/lib/socket-events"
+import { db } from "@/lib/firebase"
+import { collection, doc, onSnapshot, setDoc, updateDoc, serverTimestamp, arrayUnion, arrayRemove } from "firebase/firestore"
+
+/**
+ * Hook to bind Firebase-based socket events to lifecycle and custom event handlers.
+ * Keeps the same API as Socket.IO but implemented through Firestore real-time updates.
+ */
 
 interface UseSocketEventsOptions {
   onConnect?: () => void
@@ -13,58 +20,70 @@ interface UseSocketEventsOptions {
 }
 
 export function useSocketEvents(options: UseSocketEventsOptions) {
-  const { socket, on, off } = useSocket()
+  const { socket, on, off, isConnected } = useSocket()
 
   useEffect(() => {
     if (!socket) return
 
-    // Connection events
-    if (options.onConnect) {
-      on(SOCKET_EVENTS.CONNECT, options.onConnect)
+    // 🔌 Simulate connection event via Firestore heartbeat
+    if (isConnected && options.onConnect) {
+      options.onConnect()
     }
 
-    if (options.onDisconnect) {
-      on(SOCKET_EVENTS.DISCONNECT, options.onDisconnect)
+    // 🔄 Listen for Firestore heartbeat disconnection
+    let unsubHeartbeat: any
+    try {
+      const heartbeatRef = collection(db, "_heartbeat")
+      unsubHeartbeat = onSnapshot(heartbeatRef, () => {
+        // simulate "connected"
+        if (!isConnected && options.onConnect) options.onConnect()
+      })
+    } catch (err) {
+      console.error("Firebase heartbeat error:", err)
+      if (options.onError) options.onError(err)
     }
 
-    if (options.onError) {
-      on(SOCKET_EVENTS.CONNECT_ERROR, options.onError)
-    }
-
-    // Custom events
+    // Bind Firestore event listeners (custom “socket-like” events)
+    const unsubs: (() => void)[] = []
     if (options.events) {
       Object.entries(options.events).forEach(([event, handler]) => {
-        on(event, handler)
+        const eventsRef = collection(db, "events")
+        const unsub = onSnapshot(eventsRef, (snapshot) => {
+          const filtered = snapshot.docs
+            .map((doc) => doc.data())
+            .filter((d) => d.event === event)
+          if (filtered.length) handler(filtered)
+        })
+        unsubs.push(unsub)
       })
     }
 
     // Cleanup
     return () => {
-      if (options.onConnect) off(SOCKET_EVENTS.CONNECT, options.onConnect)
-      if (options.onDisconnect) off(SOCKET_EVENTS.DISCONNECT, options.onDisconnect)
-      if (options.onError) off(SOCKET_EVENTS.CONNECT_ERROR, options.onError)
-      if (options.events) {
-        Object.entries(options.events).forEach(([event, handler]) => {
-          off(event, handler)
-        })
-      }
+      unsubHeartbeat && unsubHeartbeat()
+      if (options.onDisconnect) options.onDisconnect()
+      unsubs.forEach((fn) => fn())
     }
-  }, [socket, on, off, options])
+  }, [socket, on, off, options, isConnected])
 }
 
-// Hook for joining/leaving rooms
+/**
+ * Hook for joining/leaving a Firestore-backed “room”.
+ * Keeps identical API to useSocketRoom() from Socket.IO.
+ */
+
 export function useSocketRoom(roomType: string, roomId: string) {
   const { joinRoom, leaveRoom } = useSocket()
 
   useEffect(() => {
-    if (roomId) {
-      joinRoom(roomType, roomId)
-    }
+    if (!roomId) return
 
+    // 🟢 Join Firestore room
+    joinRoom(roomType, roomId)
+
+    // 🔴 Leave room on unmount
     return () => {
-      if (roomId) {
-        leaveRoom(roomType, roomId)
-      }
+      leaveRoom(roomType, roomId)
     }
   }, [roomType, roomId, joinRoom, leaveRoom])
 }
